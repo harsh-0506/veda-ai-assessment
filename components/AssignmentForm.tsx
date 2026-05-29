@@ -71,7 +71,7 @@ export default function AssignmentForm({ onGenerateStart, onGenerateSuccess }: {
     };
 
     try {
-      const response = await fetch("http://localhost:5000/api/generate", {
+      const response = await fetch("https://veda-ai-backend-y2fu.onrender.com/api/generate", {
         method: "POST",
         headers: {
           "Content-Type": "application/json", 

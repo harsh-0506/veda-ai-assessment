@@ -1,32 +1,29 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { 
-  ArrowLeft, 
-  Bell, 
-  CloudUpload, 
-  Calendar, 
-  ChevronDown, 
-  Plus, 
-  Minus, 
-  Mic, 
-  ArrowRight,
-  X,
-  LogOut, 
-  User, 
-  Settings
+  ArrowLeft, Bell, CloudUpload, Calendar, ChevronDown, Plus, Minus, Mic, ArrowRight, X, LogOut, User, Settings
 } from 'lucide-react';
 
 export default function AssignmentForm({ onGenerateStart, onGenerateSuccess }: { onGenerateStart: () => void, onGenerateSuccess: (data: any) => void }) {
   
-  // OUR STATE
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [questionRows, setQuestionRows] = useState([
     { id: 1, type: "Multiple Choice Questions", count: 4, marks: 1 }
   ]);
-  
   const [dueDate, setDueDate] = useState("");
   const [additionalInfo, setAdditionalInfo] = useState("");
+  
+  // NEW FILE STATE
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // NEW FILE HANDLER
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setSelectedFile(e.target.files[0]);
+    }
+  };
 
   const addRow = () => {
     const newRow = {
@@ -70,13 +67,19 @@ export default function AssignmentForm({ onGenerateStart, onGenerateSuccess }: {
       sections: questionRows
     };
 
+    // NEW: Bundle the JSON and the File together into FormData
+    const formData = new FormData();
+    formData.append('data', JSON.stringify(finalPayload));
+    
+    if (selectedFile) {
+      formData.append('document', selectedFile);
+    }
+
     try {
       const response = await fetch("https://veda-ai-backend-y2fu.onrender.com/api/generate", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json", 
-        },
-        body: JSON.stringify(finalPayload), 
+        // Notice we REMOVED the Content-Type header entirely! The browser handles it for files.
+        body: formData, 
       });
 
       const data = await response.json();
@@ -168,14 +171,28 @@ export default function AssignmentForm({ onGenerateStart, onGenerateSuccess }: {
           <h2 className="font-bold text-lg mb-1">Assignment Details</h2>
           <p className="text-sm text-gray-500 mb-6">Basic information about your assignment</p>
 
-          <div className="border-2 border-dashed border-gray-200 rounded-xl p-8 flex flex-col items-center justify-center text-center mb-6 hover:bg-gray-50 transition-colors cursor-pointer">
-            <CloudUpload size={32} className="text-gray-400 mb-3" />
-            <p className="font-medium text-gray-700">Choose a file or drag & drop it here</p>
-            <p className="text-xs text-gray-400 mb-4">JPEG, PNG, upto 10MB</p>
+          {/* ----- THE NEW CLICKABLE CLOUD UPLOAD AREA ----- */}
+          <div 
+            onClick={() => fileInputRef.current?.click()}
+            className="border-2 border-dashed border-gray-200 rounded-xl p-8 flex flex-col items-center justify-center text-center mb-6 hover:bg-gray-50 transition-colors cursor-pointer"
+          >
+            <input 
+              type="file" 
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept=".pdf,.txt" 
+              className="hidden" 
+            />
+            <CloudUpload size={32} className={`${selectedFile ? 'text-green-500' : 'text-gray-400'} mb-3`} />
+            <p className="font-medium text-gray-700">
+              {selectedFile ? selectedFile.name : "Choose a file or drag & drop it here"}
+            </p>
+            <p className="text-xs text-gray-400 mb-4">PDF or TXT documents</p>
             <button className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors">
-              Browse Files
+              {selectedFile ? "Change File" : "Browse Files"}
             </button>
           </div>
+          {/* ----------------------------------------------- */}
 
           <div className="mb-8">
             <label className="block text-sm font-semibold text-gray-700 mb-2">Due Date</label>

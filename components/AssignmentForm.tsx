@@ -2,16 +2,20 @@
 
 import { useState, useRef } from 'react';
 import { 
-  ArrowLeft, Bell, CloudUpload, Calendar, ChevronDown, Plus, Minus, Mic, ArrowRight, X, LogOut, User, Settings
+  ArrowLeft, Bell, CloudUpload, Calendar, ChevronDown, Plus, Minus, Mic, ArrowRight, X, LogOut, User, Settings, BookOpen
 } from 'lucide-react';
 
 export default function AssignmentForm({ onGenerateStart, onGenerateSuccess }: { onGenerateStart: () => void, onGenerateSuccess: (data: any) => void }) {
   
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  
+  // NEW: Added extraParam for things like "How many examples?"
   const [questionRows, setQuestionRows] = useState([
-    { id: 1, type: "Multiple Choice Questions", count: 4, marks: 1 }
+    { id: 1, type: "Multiple Choice Questions", count: 4, marks: 1, extraParam: 2 }
   ]);
+  
   const [dueDate, setDueDate] = useState("");
+  const [subject, setSubject] = useState(""); // NEW SUBJECT STATE
   const [additionalInfo, setAdditionalInfo] = useState("");
   
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -28,7 +32,8 @@ export default function AssignmentForm({ onGenerateStart, onGenerateSuccess }: {
       id: Date.now(),
       type: "Short Questions",
       count: 1,
-      marks: 2
+      marks: 2,
+      extraParam: 2 // Default to 2 examples
     };
     setQuestionRows([...questionRows, newRow]);
   };
@@ -39,11 +44,14 @@ export default function AssignmentForm({ onGenerateStart, onGenerateSuccess }: {
     }
   };
 
-  const updateNumber = (id: number, field: 'count' | 'marks', amount: number) => {
+  // NEW: Updated to support decimal marks (0.5 increments) and extraParam
+  const updateNumber = (id: number, field: 'count' | 'marks' | 'extraParam', amount: number) => {
     setQuestionRows(questionRows.map(row => {
       if (row.id === id) {
-        const newValue = row[field] + amount;
-        return { ...row, [field]: Math.max(1, newValue) };
+        // ParseFloat fixes floating point math (e.g., 0.5 + 0.5 = 1.0)
+        let newValue = parseFloat((row[field] + amount).toFixed(1)); 
+        const minVal = field === 'marks' ? 0.5 : 1; // Marks can go down to 0.5
+        return { ...row, [field]: Math.max(minVal, newValue) };
       }
       return row;
     }));
@@ -56,6 +64,7 @@ export default function AssignmentForm({ onGenerateStart, onGenerateSuccess }: {
     onGenerateStart();
     
     const finalPayload = {
+      subject: subject, // NEW: Added to payload
       dueDate: dueDate,
       instructions: additionalInfo,
       totals: {
@@ -118,10 +127,7 @@ export default function AssignmentForm({ onGenerateStart, onGenerateSuccess }: {
                 HJ
               </div>
               <span className="hidden sm:block text-sm font-medium">Harsh Jaiswal</span>
-              <ChevronDown 
-                size={16} 
-                className={`hidden sm:block text-gray-400 transition-transform duration-200 ${isProfileOpen ? 'rotate-180' : ''}`} 
-              />
+              <ChevronDown size={16} className={`hidden sm:block text-gray-400 transition-transform duration-200 ${isProfileOpen ? 'rotate-180' : ''}`} />
             </div>
 
             {isProfileOpen && (
@@ -153,40 +159,52 @@ export default function AssignmentForm({ onGenerateStart, onGenerateSuccess }: {
           <h2 className="font-bold text-base sm:text-lg mb-1">Assignment Details</h2>
           <p className="text-xs sm:text-sm text-gray-500 mb-4 sm:mb-6">Basic information about your assignment</p>
 
-          <div 
-            onClick={() => fileInputRef.current?.click()}
-            className="border-2 border-dashed border-gray-200 rounded-xl p-4 sm:p-8 flex flex-col items-center justify-center text-center mb-6 hover:bg-gray-50 transition-colors cursor-pointer"
-          >
+          <div onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed border-gray-200 rounded-xl p-4 sm:p-8 flex flex-col items-center justify-center text-center mb-6 hover:bg-gray-50 transition-colors cursor-pointer">
             <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".pdf,.txt" className="hidden" />
             <CloudUpload size={32} className={`${selectedFile ? 'text-green-500' : 'text-gray-400'} mb-2 sm:mb-3`} />
-            <p className="font-medium text-sm sm:text-base text-gray-700">
-              {selectedFile ? selectedFile.name : "Choose a file or drag & drop it here"}
-            </p>
+            <p className="font-medium text-sm sm:text-base text-gray-700">{selectedFile ? selectedFile.name : "Choose a file or drag & drop it here"}</p>
             <p className="text-xs text-gray-400 mb-3 sm:mb-4">PDF or TXT documents</p>
             <button className="bg-gray-100 text-gray-700 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-200 transition-colors">
               {selectedFile ? "Change File" : "Browse Files"}
             </button>
           </div>
 
-          <div className="mb-6 sm:mb-8">
-            <label className="block text-xs sm:text-sm font-semibold text-gray-700 mb-2">Due Date</label>
-            <div className="relative">
-              <input 
-                type="text" 
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                placeholder="DD-MM-YYYY" 
-                className="w-full border rounded-xl py-2.5 sm:py-3 px-3 sm:px-4 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-              />
-              <Calendar size={18} className="absolute right-3 sm:right-4 top-3 sm:top-3.5 text-gray-400" />
+          {/* NEW SUBJECT AND DATE ROW */}
+          <div className="flex flex-col md:flex-row gap-4 mb-6 sm:mb-8">
+            <div className="flex-1">
+              <label className="block text-xs sm:text-sm font-semibold text-gray-700 mb-2">Subject</label>
+              <div className="relative">
+                <input 
+                  type="text" 
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                  placeholder="e.g. Science, Mathematics..." 
+                  className="w-full border rounded-xl py-2.5 sm:py-3 px-3 sm:px-4 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                />
+                <BookOpen size={18} className="absolute right-3 sm:right-4 top-3 sm:top-3.5 text-gray-400" />
+              </div>
+            </div>
+            
+            <div className="flex-1">
+              <label className="block text-xs sm:text-sm font-semibold text-gray-700 mb-2">Due Date</label>
+              <div className="relative">
+                <input 
+                  type="text" 
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                  placeholder="DD-MM-YYYY" 
+                  className="w-full border rounded-xl py-2.5 sm:py-3 px-3 sm:px-4 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                />
+                <Calendar size={18} className="absolute right-3 sm:right-4 top-3 sm:top-3.5 text-gray-400" />
+              </div>
             </div>
           </div>
 
           <div className="mb-6">
             <div className="hidden md:flex text-sm font-semibold text-gray-700 mb-3 px-2">
               <div className="flex-1">Question Type</div>
-              <div className="w-32 text-center">No. of Questions</div>
-              <div className="w-24 text-center">Marks</div>
+              <div className="w-28 text-center">Questions</div>
+              <div className="w-28 text-center">Marks per Q</div>
               <div className="w-8"></div>
             </div>
 
@@ -195,7 +213,6 @@ export default function AssignmentForm({ onGenerateStart, onGenerateSuccess }: {
                 
                 <div className="w-full md:flex-1 relative">
                   <label className="md:hidden block text-xs font-semibold text-gray-500 mb-1">Question Type</label>
-                  {/* --- THE UPDATED EXPANDED DROPDOWN --- */}
                   <select 
                     value={row.type}
                     onChange={(e) => setQuestionRows(questionRows.map(r => r.id === row.id ? { ...r, type: e.target.value } : r))}
@@ -206,20 +223,36 @@ export default function AssignmentForm({ onGenerateStart, onGenerateSuccess }: {
                     <option>True or False</option>
                     <option>Match the following</option>
                     <option>One word answers</option>
+                    {/* NEW OPTIONS ADDED HERE */}
+                    <option>Give examples</option> 
+                    <option>Give reasons</option> 
+                    <option>Assertion and Reason</option> 
                     <option>Very Short Questions</option>
                     <option>Short Questions</option>
                     <option>Long Questions</option>
                     <option>Diagram/Graph-Based Questions</option>
                     <option>Numerical Problems</option>
                   </select>
-                  {/* -------------------------------------- */}
                   <ChevronDown size={16} className="absolute right-3 sm:right-4 top-8 md:top-3.5 text-gray-400 pointer-events-none" />
                 </div>
                 
-                <div className="flex items-center justify-between md:justify-start gap-3 w-full md:w-auto">
+                <div className="flex flex-wrap md:flex-nowrap items-center justify-between md:justify-start gap-3 w-full md:w-auto">
+                  
+                  {/* NEW: DYNAMIC EXTRA PARAMETER FOR "GIVE EXAMPLES" */}
+                  {row.type === 'Give examples' && (
+                    <div className="flex-1 md:flex-none">
+                      <label className="md:hidden block text-xs font-semibold text-gray-500 mb-1">Items/Q</label>
+                      <div className="flex items-center justify-between border border-orange-200 rounded-xl bg-orange-50 md:w-28 px-2 sm:px-3 py-2">
+                        <button onClick={() => updateNumber(row.id, 'extraParam', -1)} className="text-orange-500 hover:text-orange-700 p-1"><Minus size={14} /></button>
+                        <span className="text-sm font-semibold text-orange-700">{row.extraParam} ex.</span>
+                        <button onClick={() => updateNumber(row.id, 'extraParam', 1)} className="text-orange-500 hover:text-orange-700 p-1"><Plus size={14} /></button>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex-1 md:flex-none">
                     <label className="md:hidden block text-xs font-semibold text-gray-500 mb-1">Count</label>
-                    <div className="flex items-center justify-between border rounded-xl bg-white md:w-32 px-2 sm:px-3 py-2">
+                    <div className="flex items-center justify-between border rounded-xl bg-white md:w-28 px-2 sm:px-3 py-2">
                       <button onClick={() => updateNumber(row.id, 'count', -1)} className="text-gray-400 hover:text-gray-900 p-1"><Minus size={14} /></button>
                       <span className="text-sm font-semibold">{row.count}</span>
                       <button onClick={() => updateNumber(row.id, 'count', 1)} className="text-gray-400 hover:text-gray-900 p-1"><Plus size={14} /></button>
@@ -228,10 +261,11 @@ export default function AssignmentForm({ onGenerateStart, onGenerateSuccess }: {
 
                   <div className="flex-1 md:flex-none">
                     <label className="md:hidden block text-xs font-semibold text-gray-500 mb-1">Marks</label>
-                    <div className="flex items-center justify-between border rounded-xl bg-white md:w-24 px-2 sm:px-3 py-2">
-                      <button onClick={() => updateNumber(row.id, 'marks', -1)} className="text-gray-400 hover:text-gray-900 p-1"><Minus size={14} /></button>
+                    <div className="flex items-center justify-between border rounded-xl bg-white md:w-28 px-2 sm:px-3 py-2">
+                      {/* NEW: 0.5 INCREMENTS ADDED HERE */}
+                      <button onClick={() => updateNumber(row.id, 'marks', -0.5)} className="text-gray-400 hover:text-gray-900 p-1"><Minus size={14} /></button>
                       <span className="text-sm font-semibold">{row.marks}</span>
-                      <button onClick={() => updateNumber(row.id, 'marks', 1)} className="text-gray-400 hover:text-gray-900 p-1"><Plus size={14} /></button>
+                      <button onClick={() => updateNumber(row.id, 'marks', 0.5)} className="text-gray-400 hover:text-gray-900 p-1"><Plus size={14} /></button>
                     </div>
                   </div>
 

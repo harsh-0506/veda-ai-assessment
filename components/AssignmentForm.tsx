@@ -2,20 +2,22 @@
 
 import { useState, useRef } from 'react';
 import { 
-  ArrowLeft, Bell, CloudUpload, Calendar, ChevronDown, Plus, Minus, Mic, ArrowRight, X, LogOut, User, Settings, BookOpen
+  ArrowLeft, Bell, CloudUpload, Calendar, ChevronDown, Plus, Minus, Mic, ArrowRight, X, LogOut, User, Settings, BookOpen, MapPin, GraduationCap
 } from 'lucide-react';
 
 export default function AssignmentForm({ onGenerateStart, onGenerateSuccess }: { onGenerateStart: () => void, onGenerateSuccess: (data: any) => void }) {
   
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   
-  // NEW: Added extraParam for things like "How many examples?"
+  // NEW STATE PROPERTIES: attemptCount and hasOrChoice
   const [questionRows, setQuestionRows] = useState([
-    { id: 1, type: "Multiple Choice Questions", count: 4, marks: 1, extraParam: 2 }
+    { id: 1, type: "Multiple Choice Questions", count: 4, attemptCount: 4, marks: 1, extraParam: 2, hasOrChoice: false }
   ]);
   
   const [dueDate, setDueDate] = useState("");
-  const [subject, setSubject] = useState(""); // NEW SUBJECT STATE
+  const [subject, setSubject] = useState(""); 
+  const [branchName, setBranchName] = useState(""); // NEW
+  const [teacherName, setTeacherName] = useState(""); // NEW
   const [additionalInfo, setAdditionalInfo] = useState("");
   
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -32,8 +34,10 @@ export default function AssignmentForm({ onGenerateStart, onGenerateSuccess }: {
       id: Date.now(),
       type: "Short Questions",
       count: 1,
+      attemptCount: 1,
       marks: 2,
-      extraParam: 2 // Default to 2 examples
+      extraParam: 2,
+      hasOrChoice: false
     };
     setQuestionRows([...questionRows, newRow]);
   };
@@ -44,27 +48,45 @@ export default function AssignmentForm({ onGenerateStart, onGenerateSuccess }: {
     }
   };
 
-  // NEW: Updated to support decimal marks (0.5 increments) and extraParam
-  const updateNumber = (id: number, field: 'count' | 'marks' | 'extraParam', amount: number) => {
+  // UPDATED: Now supports 0.25 increments for marks, and handles attempt limits
+  const updateNumber = (id: number, field: 'count' | 'attemptCount' | 'marks' | 'extraParam', amount: number) => {
     setQuestionRows(questionRows.map(row => {
       if (row.id === id) {
-        // ParseFloat fixes floating point math (e.g., 0.5 + 0.5 = 1.0)
-        let newValue = parseFloat((row[field] + amount).toFixed(1)); 
-        const minVal = field === 'marks' ? 0.5 : 1; // Marks can go down to 0.5
-        return { ...row, [field]: Math.max(minVal, newValue) };
+        let newValue = parseFloat((row[field] + amount).toFixed(2)); 
+        const minVal = field === 'marks' ? 0.25 : 1; 
+        newValue = Math.max(minVal, newValue);
+
+        // Logic to ensure Attempt Count doesn't exceed Total Count
+        if (field === 'count') {
+          return { ...row, count: newValue, attemptCount: Math.min(row.attemptCount, newValue) };
+        }
+        if (field === 'attemptCount') {
+          return { ...row, attemptCount: Math.min(row.count, newValue) };
+        }
+        
+        return { ...row, [field]: newValue };
       }
       return row;
     }));
   };
 
+  const toggleOrChoice = (id: number) => {
+    setQuestionRows(questionRows.map(row => 
+      row.id === id ? { ...row, hasOrChoice: !row.hasOrChoice } : row
+    ));
+  };
+
   const totalQuestions = questionRows.reduce((sum, row) => sum + row.count, 0);
-  const totalMarks = questionRows.reduce((sum, row) => sum + (row.count * row.marks), 0);
+  // Calculate marks based on what students ATTEMPT, not total generated
+  const totalMarks = questionRows.reduce((sum, row) => sum + (row.attemptCount * row.marks), 0);
 
   const handleNextClick = async () => {
     onGenerateStart();
     
     const finalPayload = {
-      subject: subject, // NEW: Added to payload
+      subject: subject,
+      branchName: branchName, // NEW
+      teacherName: teacherName, // NEW
       dueDate: dueDate,
       instructions: additionalInfo,
       totals: {
@@ -123,11 +145,9 @@ export default function AssignmentForm({ onGenerateStart, onGenerateSuccess }: {
               onClick={() => setIsProfileOpen(!isProfileOpen)}
               className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1 sm:p-1.5 sm:pr-3 rounded-full border border-transparent hover:border-gray-200 transition-all"
             >
-              <div className="h-7 w-7 sm:h-8 sm:w-8 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center font-bold text-xs">
-                HJ
-              </div>
+              <div className="h-7 w-7 sm:h-8 sm:w-8 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center font-bold text-xs">HJ</div>
               <span className="hidden sm:block text-sm font-medium">Harsh Jaiswal</span>
-              <ChevronDown size={16} className={`hidden sm:block text-gray-400 transition-transform duration-200 ${isProfileOpen ? 'rotate-180' : ''}`} />
+              <ChevronDown size={16} className={`hidden sm:block text-gray-400 transition-transform ${isProfileOpen ? 'rotate-180' : ''}`} />
             </div>
 
             {isProfileOpen && (
@@ -169,113 +189,138 @@ export default function AssignmentForm({ onGenerateStart, onGenerateSuccess }: {
             </button>
           </div>
 
-          {/* NEW SUBJECT AND DATE ROW */}
-          <div className="flex flex-col md:flex-row gap-4 mb-6 sm:mb-8">
-            <div className="flex-1">
+          {/* NEW: BRANCH, TEACHER, SUBJECT, DATE */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 sm:mb-8">
+            <div>
+              <label className="block text-xs sm:text-sm font-semibold text-gray-700 mb-2">Branch Name</label>
+              <div className="relative">
+                <input 
+                  type="text" value={branchName} onChange={(e) => setBranchName(e.target.value)}
+                  placeholder="e.g. Kaptanganj..." 
+                  className="w-full border rounded-xl py-2.5 px-3 sm:px-4 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                />
+                <MapPin size={18} className="absolute right-3 sm:right-4 top-3 text-gray-400" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs sm:text-sm font-semibold text-gray-700 mb-2">Teacher's Name</label>
+              <div className="relative">
+                <input 
+                  type="text" value={teacherName} onChange={(e) => setTeacherName(e.target.value)}
+                  placeholder="e.g. Anjali Jaiswal" 
+                  className="w-full border rounded-xl py-2.5 px-3 sm:px-4 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                />
+                <GraduationCap size={18} className="absolute right-3 sm:right-4 top-3 text-gray-400" />
+              </div>
+            </div>
+            <div>
               <label className="block text-xs sm:text-sm font-semibold text-gray-700 mb-2">Subject</label>
               <div className="relative">
                 <input 
-                  type="text" 
-                  value={subject}
-                  onChange={(e) => setSubject(e.target.value)}
-                  placeholder="e.g. Science, Mathematics..." 
-                  className="w-full border rounded-xl py-2.5 sm:py-3 px-3 sm:px-4 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  type="text" value={subject} onChange={(e) => setSubject(e.target.value)}
+                  placeholder="e.g. Science" 
+                  className="w-full border rounded-xl py-2.5 px-3 sm:px-4 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                 />
-                <BookOpen size={18} className="absolute right-3 sm:right-4 top-3 sm:top-3.5 text-gray-400" />
+                <BookOpen size={18} className="absolute right-3 sm:right-4 top-3 text-gray-400" />
               </div>
             </div>
-            
-            <div className="flex-1">
+            <div>
               <label className="block text-xs sm:text-sm font-semibold text-gray-700 mb-2">Due Date</label>
               <div className="relative">
                 <input 
-                  type="text" 
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
+                  type="text" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
                   placeholder="DD-MM-YYYY" 
-                  className="w-full border rounded-xl py-2.5 sm:py-3 px-3 sm:px-4 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  className="w-full border rounded-xl py-2.5 px-3 sm:px-4 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                 />
-                <Calendar size={18} className="absolute right-3 sm:right-4 top-3 sm:top-3.5 text-gray-400" />
+                <Calendar size={18} className="absolute right-3 sm:right-4 top-3 text-gray-400" />
               </div>
             </div>
           </div>
 
           <div className="mb-6">
-            <div className="hidden md:flex text-sm font-semibold text-gray-700 mb-3 px-2">
-              <div className="flex-1">Question Type</div>
-              <div className="w-28 text-center">Questions</div>
-              <div className="w-28 text-center">Marks per Q</div>
-              <div className="w-8"></div>
-            </div>
-
             {questionRows.map((row) => (
-              <div key={row.id} className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4 mb-4 md:mb-3 p-3 md:p-0 border border-gray-100 md:border-none rounded-xl md:rounded-none bg-gray-50 md:bg-transparent">
+              <div key={row.id} className="flex flex-col gap-3 mb-4 p-4 border border-gray-100 rounded-xl bg-gray-50">
                 
-                <div className="w-full md:flex-1 relative">
-                  <label className="md:hidden block text-xs font-semibold text-gray-500 mb-1">Question Type</label>
-                  <select 
-                    value={row.type}
-                    onChange={(e) => setQuestionRows(questionRows.map(r => r.id === row.id ? { ...r, type: e.target.value } : r))}
-                    className="w-full border rounded-xl py-2.5 sm:py-3 px-3 sm:px-4 text-sm appearance-none bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  >
-                    <option>Multiple Choice Questions</option>
-                    <option>Fill in the blanks</option>
-                    <option>True or False</option>
-                    <option>Match the following</option>
-                    <option>One word answers</option>
-                    {/* NEW OPTIONS ADDED HERE */}
-                    <option>Give examples</option> 
-                    <option>Give reasons</option> 
-                    <option>Assertion and Reason</option> 
-                    <option>Very Short Questions</option>
-                    <option>Short Questions</option>
-                    <option>Long Questions</option>
-                    <option>Diagram/Graph-Based Questions</option>
-                    <option>Numerical Problems</option>
-                  </select>
-                  <ChevronDown size={16} className="absolute right-3 sm:right-4 top-8 md:top-3.5 text-gray-400 pointer-events-none" />
-                </div>
-                
-                <div className="flex flex-wrap md:flex-nowrap items-center justify-between md:justify-start gap-3 w-full md:w-auto">
+                <div className="flex flex-col md:flex-row gap-3">
+                  <div className="w-full md:flex-1 relative">
+                    <label className="block text-xs font-semibold text-gray-500 mb-1">Question Type</label>
+                    <select 
+                      value={row.type}
+                      onChange={(e) => setQuestionRows(questionRows.map(r => r.id === row.id ? { ...r, type: e.target.value } : r))}
+                      className="w-full border rounded-xl py-2.5 px-3 sm:px-4 text-sm appearance-none bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    >
+                      <option>Multiple Choice Questions</option>
+                      <option>Fill in the blanks</option>
+                      <option>True or False</option>
+                      <option>Match the following</option>
+                      <option>One word answers</option>
+                      <option>Give examples</option> 
+                      <option>Give reasons</option> 
+                      <option>Assertion and Reason</option> 
+                      <option>Very Short Questions</option>
+                      <option>Short Questions</option>
+                      <option>Long Questions</option>
+                      <option>Diagram/Graph-Based Questions</option>
+                      <option>Numerical Problems</option>
+                    </select>
+                    <ChevronDown size={16} className="absolute right-3 sm:right-4 top-8 text-gray-400 pointer-events-none" />
+                  </div>
                   
-                  {/* NEW: DYNAMIC EXTRA PARAMETER FOR "GIVE EXAMPLES" */}
+                  <div className="pt-5 flex items-center gap-4">
+                    {/* NEW: OR Checkbox */}
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={row.hasOrChoice} 
+                        onChange={() => toggleOrChoice(row.id)}
+                        className="w-4 h-4 text-orange-600 rounded border-gray-300 focus:ring-orange-500"
+                      />
+                      <span className="text-xs font-semibold text-gray-600">Add "OR" Option</span>
+                    </label>
+
+                    <button onClick={() => deleteRow(row.id)} className={`p-2 rounded-lg transition-colors ${questionRows.length > 1 ? 'text-gray-400 hover:text-red-500 hover:bg-red-50' : 'text-gray-200 cursor-not-allowed'}`}>
+                      <X size={18} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
                   {row.type === 'Give examples' && (
-                    <div className="flex-1 md:flex-none">
-                      <label className="md:hidden block text-xs font-semibold text-gray-500 mb-1">Items/Q</label>
-                      <div className="flex items-center justify-between border border-orange-200 rounded-xl bg-orange-50 md:w-28 px-2 sm:px-3 py-2">
-                        <button onClick={() => updateNumber(row.id, 'extraParam', -1)} className="text-orange-500 hover:text-orange-700 p-1"><Minus size={14} /></button>
-                        <span className="text-sm font-semibold text-orange-700">{row.extraParam} ex.</span>
-                        <button onClick={() => updateNumber(row.id, 'extraParam', 1)} className="text-orange-500 hover:text-orange-700 p-1"><Plus size={14} /></button>
+                    <div className="flex-1 min-w-[100px]">
+                      <label className="block text-xs font-semibold text-gray-500 mb-1">Examples/Q</label>
+                      <div className="flex items-center justify-between border border-orange-200 rounded-xl bg-orange-50 px-2 py-2">
+                        <button onClick={() => updateNumber(row.id, 'extraParam', -1)} className="text-orange-500 p-1"><Minus size={14} /></button>
+                        <span className="text-sm font-semibold text-orange-700">{row.extraParam}</span>
+                        <button onClick={() => updateNumber(row.id, 'extraParam', 1)} className="text-orange-500 p-1"><Plus size={14} /></button>
                       </div>
                     </div>
                   )}
 
-                  <div className="flex-1 md:flex-none">
-                    <label className="md:hidden block text-xs font-semibold text-gray-500 mb-1">Count</label>
-                    <div className="flex items-center justify-between border rounded-xl bg-white md:w-28 px-2 sm:px-3 py-2">
-                      <button onClick={() => updateNumber(row.id, 'count', -1)} className="text-gray-400 hover:text-gray-900 p-1"><Minus size={14} /></button>
+                  <div className="flex-1 min-w-[100px]">
+                    <label className="block text-xs font-semibold text-gray-500 mb-1">Total Generated</label>
+                    <div className="flex items-center justify-between border rounded-xl bg-white px-2 py-2">
+                      <button onClick={() => updateNumber(row.id, 'count', -1)} className="text-gray-400 p-1"><Minus size={14} /></button>
                       <span className="text-sm font-semibold">{row.count}</span>
-                      <button onClick={() => updateNumber(row.id, 'count', 1)} className="text-gray-400 hover:text-gray-900 p-1"><Plus size={14} /></button>
+                      <button onClick={() => updateNumber(row.id, 'count', 1)} className="text-gray-400 p-1"><Plus size={14} /></button>
                     </div>
                   </div>
 
-                  <div className="flex-1 md:flex-none">
-                    <label className="md:hidden block text-xs font-semibold text-gray-500 mb-1">Marks</label>
-                    <div className="flex items-center justify-between border rounded-xl bg-white md:w-28 px-2 sm:px-3 py-2">
-                      {/* NEW: 0.5 INCREMENTS ADDED HERE */}
-                      <button onClick={() => updateNumber(row.id, 'marks', -0.5)} className="text-gray-400 hover:text-gray-900 p-1"><Minus size={14} /></button>
+                  <div className="flex-1 min-w-[100px]">
+                    <label className="block text-xs font-semibold text-orange-500 mb-1">Attempt Count</label>
+                    <div className="flex items-center justify-between border-2 border-orange-100 rounded-xl bg-white px-2 py-2">
+                      <button onClick={() => updateNumber(row.id, 'attemptCount', -1)} className="text-orange-400 p-1"><Minus size={14} /></button>
+                      <span className="text-sm font-bold text-orange-600">{row.attemptCount}</span>
+                      <button onClick={() => updateNumber(row.id, 'attemptCount', 1)} className="text-orange-400 p-1"><Plus size={14} /></button>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 min-w-[100px]">
+                    <label className="block text-xs font-semibold text-gray-500 mb-1">Marks (0.25 steps)</label>
+                    <div className="flex items-center justify-between border rounded-xl bg-white px-2 py-2">
+                      <button onClick={() => updateNumber(row.id, 'marks', -0.25)} className="text-gray-400 p-1"><Minus size={14} /></button>
                       <span className="text-sm font-semibold">{row.marks}</span>
-                      <button onClick={() => updateNumber(row.id, 'marks', 0.5)} className="text-gray-400 hover:text-gray-900 p-1"><Plus size={14} /></button>
+                      <button onClick={() => updateNumber(row.id, 'marks', 0.25)} className="text-gray-400 p-1"><Plus size={14} /></button>
                     </div>
-                  </div>
-
-                  <div className="pt-5 md:pt-0">
-                    <button 
-                      onClick={() => deleteRow(row.id)} 
-                      className={`p-2 rounded-lg transition-colors ${questionRows.length > 1 ? 'text-gray-400 hover:text-red-500 hover:bg-red-50' : 'text-gray-200 cursor-not-allowed'}`}
-                    >
-                      <X size={18} />
-                    </button>
                   </div>
                 </div>
 
@@ -283,30 +328,21 @@ export default function AssignmentForm({ onGenerateStart, onGenerateSuccess }: {
             ))}
           </div>
 
-          <button 
-            onClick={addRow}
-            className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-gray-900 hover:text-orange-600 transition-colors mb-6"
-          >
-            <div className="bg-gray-900 text-white rounded-full p-1"><Plus size={12} /></div>
-            Add Question Type
+          <button onClick={addRow} className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-gray-900 hover:text-orange-600 transition-colors mb-6">
+            <div className="bg-gray-900 text-white rounded-full p-1"><Plus size={12} /></div> Add Question Type
           </button>
 
           <div className="flex flex-col items-end text-xs sm:text-sm font-semibold text-gray-700 mb-6 sm:mb-8 border-t pt-4">
-            <p className="mb-1">Total Questions : {totalQuestions}</p>
-            <p>Total Marks : {totalMarks}</p>
+            <p className="mb-1 text-gray-500">Total Generated: {totalQuestions}</p>
+            <p className="mb-1">Total to Attempt: {questionRows.reduce((sum, row) => sum + row.attemptCount, 0)}</p>
+            <p className="text-orange-600">Total Marks: {totalMarks}</p>
           </div>
 
           <div>
-            <label className="block text-xs sm:text-sm font-semibold text-gray-700 mb-2">Additional Information (For better output)</label>
+            <label className="block text-xs sm:text-sm font-semibold text-gray-700 mb-2">Additional Information</label>
             <div className="relative">
-              <textarea 
-                value={additionalInfo}
-                onChange={(e) => setAdditionalInfo(e.target.value)}
-                rows={3}
-                placeholder="e.g Generate a question paper for 3 hour exam duration..." 
-                className="w-full border bg-gray-50 rounded-xl py-2.5 sm:py-3 px-3 sm:px-4 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none"
-              ></textarea>
-              <Mic size={18} className="absolute right-3 sm:right-4 bottom-3 sm:bottom-4 text-gray-400 cursor-pointer hover:text-gray-700" />
+              <textarea value={additionalInfo} onChange={(e) => setAdditionalInfo(e.target.value)} rows={3} className="w-full border bg-gray-50 rounded-xl py-2.5 px-3 sm:px-4 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none"></textarea>
+              <Mic size={18} className="absolute right-3 sm:right-4 bottom-3 text-gray-400 cursor-pointer hover:text-gray-700" />
             </div>
           </div>
 
@@ -317,10 +353,7 @@ export default function AssignmentForm({ onGenerateStart, onGenerateSuccess }: {
         <button className="flex items-center gap-1 sm:gap-2 px-4 sm:px-6 py-2 sm:py-2.5 border rounded-full text-xs sm:text-sm font-medium hover:bg-gray-50 transition-colors">
           <ArrowLeft size={16} /> <span className="hidden sm:inline">Previous</span>
         </button>
-        <button 
-          onClick={handleNextClick}
-          className="flex items-center gap-1 sm:gap-2 px-4 sm:px-6 py-2 sm:py-2.5 bg-gray-900 text-white rounded-full text-xs sm:text-sm font-medium hover:bg-gray-800 transition-colors"
-        >
+        <button onClick={handleNextClick} className="flex items-center gap-1 sm:gap-2 px-4 sm:px-6 py-2 sm:py-2.5 bg-gray-900 text-white rounded-full text-xs sm:text-sm font-medium hover:bg-gray-800 transition-colors">
           Next <ArrowRight size={16} />
         </button>
       </div>
